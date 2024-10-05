@@ -3,38 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bitcoin & Sats to Fiat Converter</title>
+    <title>BTC, Satoshis, Fiat Converter</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
-            background-color: #f8f9fa;
+            background-color: #ffffff;
+            font-family: Arial, sans-serif;
         }
         .container {
-            margin-top: 50px;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            border-radius: 8px;
+            
         }
-        .result {
-            margin-top: 20px;
+        h1 {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        label {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #555;
+        }
+        .spinner {
+            display: none;
+            width: 24px;
+            height: 24px;
+            border: 4px solid #f3f4f6;
+            border-top: 4px solid #F2A900;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-control {
+            height: 50px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 class="text-center">Bitcoin & Sats to Fiat Converter</h1>
+        <h1 class="text-center">BTC, Satoshis, and Fiat Converter</h1>
 
         <form id="converterForm" class="mt-4">
-            <div class="mb-3">
-                <label for="amountType" class="form-label">Select Amount Type:</label>
-                <select id="amountType" class="form-select">
-                    <option value="btc">BTC (Bitcoin)</option>
-                    <option value="sats">Sats (Satoshis)</option>
-                </select>
+            <div class="form-group">
+                <label for="btcInput">Bitcoin (BTC):</label>
+                <input type="number" step="any" id="btcInput" class="form-control" placeholder="Enter BTC amount" required>
             </div>
-            <div class="mb-3">
-                <label for="amount" class="form-label">Enter Amount:</label>
-                <input type="number" step="any" id="amount" class="form-control" placeholder="Enter amount" required>
+
+            <div class="form-group">
+                <label for="satsInput">Satoshis (Sats):</label>
+                <input type="number" step="any" id="satsInput" class="form-control" placeholder="Enter Satoshis amount" required>
             </div>
-            <div class="mb-3">
-                <label for="fiatCurrency" class="form-label">Select Fiat Currency:</label>
+
+            <div class="form-group">
+                <label for="fiatInput">Fiat Amount:</label>
+                <input type="number" step="any" id="fiatInput" class="form-control" placeholder="Enter Fiat amount" required>
+            </div>
+
+            <div class="form-group">
+                <label for="fiatCurrency">Select Fiat Currency:</label>
                 <select id="fiatCurrency" class="form-select">
                     <option value="usd">USD (US Dollar)</option>
                     <option value="eur">EUR (Euro)</option>
@@ -42,89 +80,98 @@
                     <option value="gbp">GBP (British Pound)</option>
                 </select>
             </div>
-        </form>
 
-        <div id="result" class="alert alert-info result" style="display:none;"></div>
+            <div class="text-center">
+                <div class="spinner"></div>
+            </div>
+        </form>
     </div>
 
     <script>
-        let timer;
-        let cachedRates = {};  // Object to store cached rates
-
-        // Debounce function to limit the frequency of API requests
-        function debounce(func, delay) {
-            clearTimeout(timer);
-            timer = setTimeout(func, delay);
-        }
-
-        // Function to fetch real-time Bitcoin price and calculate conversion
-        function convertBitcoin() {
-            const amount = document.getElementById('amount').value;
-            const amountType = document.getElementById('amountType').value;
+        let cachedRate = null; // Cached rate for Bitcoin
+        let lastFetchTime = 0; // Timestamp of last fetch
+        const cacheDuration = 300000; // 5 minutes in milliseconds
+        let isTyping = false; // Flag to avoid circular calculations during typing
+    
+        // Function to fetch real-time Bitcoin price with caching
+        async function fetchBitcoinPrice() {
             const fiatCurrency = document.getElementById('fiatCurrency').value;
-
-            if (amount && fiatCurrency) {
-                let btcAmount;
-
-                // Convert sats to BTC if the user has selected sats
-                if (amountType === "sats") {
-                    btcAmount = amount / 100000000; // Convert sats to BTC
+            const apiUrl = `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=${fiatCurrency}`;
+    
+            // Check if cached rate is still valid
+            if (cachedRate && (Date.now() - lastFetchTime < cacheDuration)) {
+                return cachedRate;
+            }
+    
+            try {
+                const response = await fetch(apiUrl);
+                if (response.ok) {
+                    const data = await response.json();
+                    cachedRate = data.bitcoin[fiatCurrency]; // Cache the new rate
+                    lastFetchTime = Date.now(); // Update fetch time
+                    return cachedRate;
                 } else {
-                    btcAmount = amount; // Amount is already in BTC
+                    throw new Error(`API request failed with status: ${response.status}`);
                 }
-
-                // Check if we have a cached rate for the selected fiat currency
-                if (cachedRates[fiatCurrency]) {
-                    displayResult(btcAmount, cachedRates[fiatCurrency], fiatCurrency, amountType);
-                } else {
-                    // Call the CoinGecko API to get the real-time Bitcoin price in the selected fiat currency
-                    const apiUrl = `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=${fiatCurrency}`;
-
-                    fetch(apiUrl)
-                        .then(response => {
-                            if (response.status === 429) {
-                                throw new Error("Too Many Requests: API rate limit exceeded.");
-                            }
-                            return response.json();
-                        })
-                        .then(data => {
-                            const bitcoinPrice = data.bitcoin[fiatCurrency];
-
-                            // Cache the rate for later use (e.g., 1 minute)
-                            cachedRates[fiatCurrency] = bitcoinPrice;
-                            setTimeout(() => {
-                                delete cachedRates[fiatCurrency];
-                            }, 60000);  // Cache expiry after 1 minute
-
-                            displayResult(btcAmount, bitcoinPrice, fiatCurrency, amountType);
-                        })
-                        .catch(error => {
-                            console.error('Error fetching data from CoinGecko API:', error);
-                            document.getElementById('result').textContent = 'Error fetching data. Please try again later.';
-                        });
-                }
+            } catch (error) {
+                console.error('Error fetching Bitcoin price:', error);
+                return null;
             }
         }
-
-        // Display the conversion result
-        function displayResult(btcAmount, bitcoinPrice, fiatCurrency, amountType) {
-            const convertedValue = btcAmount * bitcoinPrice;
-            const resultElement = document.getElementById('result');
-            resultElement.style.display = 'block';
-            
-            // Display result based on whether the user input was in BTC or Sats
-            if (amountType === "sats") {
-                const satsAmount = btcAmount * 100000000; // Convert BTC back to sats for display
-                resultElement.textContent = `${satsAmount} Sats is worth ${convertedValue.toFixed(8)} ${fiatCurrency.toUpperCase()}`;
-            } else {
-                resultElement.textContent = `${btcAmount} BTC is worth ${convertedValue.toFixed(8)} ${fiatCurrency.toUpperCase()}`;
+    
+        // Handle real-time conversion
+        async function handleConversion(event) {
+            if (isTyping) return;
+            isTyping = true;
+    
+            const btcInput = document.getElementById('btcInput');
+            const satsInput = document.getElementById('satsInput');
+            const fiatInput = document.getElementById('fiatInput');
+    
+            const bitcoinPrice = await fetchBitcoinPrice();
+            if (!bitcoinPrice) {
+                hideSpinner();
+                isTyping = false;
+                return;
             }
+    
+            const sourceField = event.target.id;
+    
+            if (sourceField === 'btcInput') {
+                const btcValue = parseFloat(btcInput.value);
+                if (!isNaN(btcValue)) {
+                    satsInput.value = (btcValue * 100000000).toFixed(0);
+                    fiatInput.value = (btcValue * bitcoinPrice).toFixed(8);
+                }
+            } else if (sourceField === 'satsInput') {
+                const satsValue = parseFloat(satsInput.value);
+                if (!isNaN(satsValue)) {
+                    btcInput.value = (satsValue / 100000000).toFixed(8);
+                    fiatInput.value = ((satsValue / 100000000) * bitcoinPrice).toFixed(8);
+                }
+            } else if (sourceField === 'fiatInput') {
+                const fiatValue = parseFloat(fiatInput.value);
+                if (!isNaN(fiatValue)) {
+                    const btcEquivalent = fiatValue / bitcoinPrice;
+                    btcInput.value = btcEquivalent.toFixed(8);
+                    satsInput.value = (btcEquivalent * 100000000).toFixed(0);
+                }
+            }
+    
+            isTyping = false;
         }
-
-        // Event listeners for real-time conversion with debounce
-        document.getElementById('amount').addEventListener('input', () => debounce(convertBitcoin, 1000));
-        document.getElementById('amountType').addEventListener('change', () => debounce(convertBitcoin, 1000));
-        document.getElementById('fiatCurrency').addEventListener('change', () => debounce(convertBitcoin, 1000));
+    
+        document.getElementById('btcInput').addEventListener('input', handleConversion);
+        document.getElementById('satsInput').addEventListener('input', handleConversion);
+        document.getElementById('fiatInput').addEventListener('input', handleConversion);
+    
+        // Event listener for fiat currency select element
+        document.getElementById('fiatCurrency').addEventListener('change', async function() {
+            await handleConversion({ target: { id: 'fiatInput' } }); // Trigger conversion when currency changes
+        });
     </script>
+    
+    
+    
 </body>
 </html>
