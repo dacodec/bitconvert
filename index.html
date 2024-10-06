@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BTC, Satoshis, Fiat Converter</title>
+    <title>BitConverter</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body {
@@ -14,14 +14,7 @@
             max-width: 600px;
             margin: 50px auto;
             padding: 20px;
-            border-radius: 8px;
-            
-        }
-        h1 {
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 20px;
-            color: #333;
+            border-radius: 8px;   
         }
         label {
             font-size: 16px;
@@ -49,12 +42,15 @@
             height: 50px;
             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
         }
+        #fetchTime {
+            font-size: 14px;
+            color: #666;
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1 class="text-center">BTC, Satoshis, and Fiat Converter</h1>
-
         <form id="converterForm" class="mt-4">
             <div class="form-group">
                 <label for="btcInput">Bitcoin (BTC):</label>
@@ -84,6 +80,9 @@
             <div class="text-center">
                 <div class="spinner"></div>
             </div>
+
+            <!-- Added element to display the fetch time -->
+            <div id="fetchTime" class="text-center"></div>
         </form>
     </div>
 
@@ -109,6 +108,8 @@
                     const data = await response.json();
                     cachedRate = data.bitcoin[fiatCurrency]; // Cache the new rate
                     lastFetchTime = Date.now(); // Update fetch time
+                    // Update fetch time display
+                    document.getElementById('fetchTime').textContent = `Price fetched at: ${new Date(lastFetchTime).toLocaleString()}`;
                     return cachedRate;
                 } else {
                     throw new Error(`API request failed with status: ${response.status}`);
@@ -170,8 +171,5 @@
             await handleConversion({ target: { id: 'fiatInput' } }); // Trigger conversion when currency changes
         });
     </script>
-    
-    
-    
 </body>
 </html>
